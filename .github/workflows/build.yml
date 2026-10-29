@@ -1,0 +1,438 @@
+name: Build PasteKeys APK
+
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Write app source files
+        run: |
+          mkdir -p "$(dirname 'settings.gradle')"
+          cat > 'settings.gradle' <<'PASTEKEYS_EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "PasteKeys"
+          include ':app'
+          PASTEKEYS_EOF
+          mkdir -p "$(dirname 'build.gradle')"
+          cat > 'build.gradle' <<'PASTEKEYS_EOF'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+          }
+          PASTEKEYS_EOF
+          mkdir -p "$(dirname 'gradle.properties')"
+          cat > 'gradle.properties' <<'PASTEKEYS_EOF'
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.nonTransitiveRClass=true
+          PASTEKEYS_EOF
+          mkdir -p "$(dirname 'app/build.gradle')"
+          cat > 'app/build.gradle' <<'PASTEKEYS_EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.soham.pastekeys'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId "com.soham.pastekeys"
+                  minSdk 28          // Bluetooth keyboard (HID device) mode needs Android 9+
+                  targetSdk 35
+                  versionCode 1
+                  versionName "1.0"
+              }
+
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          PASTEKEYS_EOF
+          mkdir -p "$(dirname 'app/src/main/AndroidManifest.xml')"
+          cat > 'app/src/main/AndroidManifest.xml' <<'PASTEKEYS_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-feature android:name="android.hardware.bluetooth" android:required="true" />
+
+              <!-- Android 11 and below -->
+              <uses-permission android:name="android.permission.BLUETOOTH" android:maxSdkVersion="30" />
+              <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" android:maxSdkVersion="30" />
+              <!-- Android 12 and above -->
+              <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+              <uses-permission android:name="android.permission.BLUETOOTH_ADVERTISE" />
+
+              <application
+                  android:allowBackup="false"
+                  android:label="PasteKeys"
+                  android:theme="@android:style/Theme.Material.Light.DarkActionBar">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:launchMode="singleTask"
+                      android:windowSoftInputMode="adjustResize">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          PASTEKEYS_EOF
+          mkdir -p "$(dirname 'app/src/main/res/layout/activity_main.xml')"
+          cat > 'app/src/main/res/layout/activity_main.xml' <<'PASTEKEYS_EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent"
+              android:fillViewport="true">
+
+              <LinearLayout
+                  android:layout_width="match_parent"
+                  android:layout_height="wrap_content"
+                  android:orientation="vertical"
+                  android:padding="16dp">
+
+                  <TextView
+                      android:id="@+id/status"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:background="#FFF1F3F5"
+                      android:padding="12dp"
+                      android:text="Starting…"
+                      android:textSize="15sp"
+                      android:textStyle="bold" />
+
+                  <LinearLayout
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:layout_marginTop="12dp"
+                      android:orientation="horizontal">
+
+                      <Button
+                          android:id="@+id/btnDiscoverable"
+                          android:layout_width="0dp"
+                          android:layout_height="wrap_content"
+                          android:layout_weight="1"
+                          android:text="Pair new laptop" />
+
+                      <Button
+                          android:id="@+id/btnConnect"
+                          android:layout_width="0dp"
+                          android:layout_height="wrap_content"
+                          android:layout_weight="1"
+                          android:text="Connect paired" />
+                  </LinearLayout>
+
+                  <Button
+                      android:id="@+id/btnPasteSend"
+                      android:layout_width="match_parent"
+                      android:layout_height="72dp"
+                      android:layout_marginTop="16dp"
+                      android:text="Paste clipboard → laptop"
+                      android:textSize="17sp" />
+
+                  <EditText
+                      android:id="@+id/input"
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:layout_marginTop="12dp"
+                      android:gravity="top|start"
+                      android:hint="Or paste / type text here, then tap Send"
+                      android:inputType="textMultiLine|textNoSuggestions"
+                      android:minLines="5" />
+
+                  <LinearLayout
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:orientation="horizontal">
+
+                      <Button
+                          android:id="@+id/btnSend"
+                          android:layout_width="0dp"
+                          android:layout_height="wrap_content"
+                          android:layout_weight="2"
+                          android:text="Send" />
+
+                      <Button
+                          android:id="@+id/btnStop"
+                          android:layout_width="0dp"
+                          android:layout_height="wrap_content"
+                          android:layout_weight="1"
+                          android:text="Stop" />
+
+                      <Button
+                          android:id="@+id/btnClear"
+                          android:layout_width="0dp"
+                          android:layout_height="wrap_content"
+                          android:layout_weight="1"
+                          android:text="Clear" />
+                  </LinearLayout>
+
+                  <CheckBox
+                      android:id="@+id/chkEnter"
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:layout_marginTop="8dp"
+                      android:text="Press Enter after sending" />
+
+                  <CheckBox
+                      android:id="@+id/chkSlow"
+                      android:layout_width="wrap_content"
+                      android:layout_height="wrap_content"
+                      android:text="Slow mode (use if letters go missing)" />
+
+                  <TextView
+                      android:layout_width="match_parent"
+                      android:layout_height="wrap_content"
+                      android:layout_marginTop="16dp"
+                      android:lineSpacingExtra="4dp"
+                      android:text="First time: tap “Pair new laptop”, then on the laptop open Bluetooth settings → Add device → choose this phone.\n\nText is typed wherever the laptop’s cursor is, so click into the right box first. Keep this app open while using it.\n\nWorks with English letters, numbers and keyboard symbols. Other characters (emoji, Hindi, etc.) are skipped."
+                      android:textColor="#FF5F6368"
+                      android:textSize="13sp" />
+              </LinearLayout>
+          </ScrollView>
+          PASTEKEYS_EOF
+          mkdir -p "$(dirname 'app/src/main/java/com/soham/pastekeys/KeyMap.java')"
+          cat > 'app/src/main/java/com/soham/pastekeys/KeyMap.java' <<'PASTEKEYS_EOF'
+          package com.soham.pastekeys;
+
+          import java.util.HashMap;
+          import java.util.Map;
+
+          /**
+           * Maps characters to USB HID keyboard usage codes for a US/English keyboard layout.
+           * The laptop must be set to an English (US) or English (India) layout for symbols to come out right.
+           */
+          final class KeyMap {
+
+              static final int MOD_NONE = 0x00;
+              static final int MOD_SHIFT = 0x02;
+
+              static final class Key {
+                  final int modifier;
+                  final int code;
+                  Key(int modifier, int code) { this.modifier = modifier; this.code = code; }
+              }
+
+              private static final Map<Character, Key> MAP = new HashMap<>();
+
+              static {
+                  for (char c = 'a'; c <= 'z'; c++) {
+                      MAP.put(c, new Key(MOD_NONE, 0x04 + (c - 'a')));
+                      MAP.put(Character.toUpperCase(c), new Key(MOD_SHIFT, 0x04 + (c - 'a')));
+                  }
+
+                  String digits = "1234567890";
+                  String shiftedDigits = "!@#$%^&*()";
+                  for (int i = 0; i < digits.length(); i++) {
+                      MAP.put(digits.charAt(i), new Key(MOD_NONE, 0x1E + i));
+                      MAP.put(shiftedDigits.charAt(i), new Key(MOD_SHIFT, 0x1E + i));
+                  }
+
+                  String symbols = "-=[]\\;'`,./";
+                  String shiftedSymbols = "_+{}|:\"~<>?";
+                  int[] symbolCodes = {0x2D, 0x2E, 0x2F, 0x30, 0x31, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38};
+                  for (int i = 0; i < symbols.length(); i++) {
+                      MAP.put(symbols.charAt(i), new Key(MOD_NONE, symbolCodes[i]));
+                      MAP.put(shiftedSymbols.charAt(i), new Key(MOD_SHIFT, symbolCodes[i]));
+                  }
+
+                  MAP.put(' ', new Key(MOD_NONE, 0x2C));
+                  MAP.put('\n', new Key(MOD_NONE, 0x28)); // Enter
+                  MAP.put('\t', new Key(MOD_NONE, 0x2B)); // Tab
+              }
+
+              static final Key ENTER = new Key(MOD_NONE, 0x28);
+
+              static Key get(char c) {
+                  return MAP.get(c);
+              }
+
+              /** Replaces "smart" characters that phone keyboards insert with plain ones a keyboard can type. */
+              static String normalize(String s) {
+                  return s.replace("\r\n", "\n")
+                          .replace('\r', '\n')
+                          .replace('‘', '\'').replace('’', '\'')
+                          .replace('“', '"').replace('”', '"')
+                          .replace('–', '-').replace('—', '-')
+                          .replace(' ', ' ')
+                          .replace("…", "...");
+              }
+
+              private KeyMap() {}
+          }
+          PASTEKEYS_EOF
+          mkdir -p "$(dirname 'app/src/main/java/com/soham/pastekeys/HidKeyboard.java')"
+          cat > 'app/src/main/java/com/soham/pastekeys/HidKeyboard.java' <<'PASTEKEYS_EOF'
+          package com.soham.pastekeys;
+
+          import android.annotation.SuppressLint;
+          import android.bluetooth.BluetoothAdapter;
+          import android.bluetooth.BluetoothDevice;
+          import android.bluetooth.BluetoothHidDevice;
+          import android.bluetooth.BluetoothHidDeviceAppSdpSettings;
+          import android.bluetooth.BluetoothManager;
+          import android.bluetooth.BluetoothProfile;
+          import android.content.Context;
+
+          import java.util.concurrent.ExecutorService;
+          import java.util.concurrent.Executors;
+
+          /**
+           * Makes the phone show up to the laptop as a normal Bluetooth keyboard (HID device),
+           * so the laptop needs no extra software.
+           */
+          @SuppressLint("MissingPermission") // permissions are requested in MainActivity before start()
+          final class HidKeyboard {
+
+              interface Listener {
+                  void onStatus(String message);
+                  void onConnected(BluetoothDevice host);
+                  void onDisconnected();
+                  void onTypingDone(int typed, int skipped);
+              }
+
+              private static final int REPORT_ID = 1;
+
+              /** Standard boot-style keyboard report descriptor with report ID 1. */
+              private static final byte[] DESCRIPTOR = {
+                      (byte) 0x05, (byte) 0x01,       // Usage Page (Generic Desktop)
+                      (byte) 0x09, (byte) 0x06,       // Usage (Keyboard)
+                      (byte) 0xA1, (byte) 0x01,       // Collection (Application)
+                      (byte) 0x85, (byte) 0x01,       //   Report ID (1)
+                      (byte) 0x05, (byte) 0x07,       //   Usage Page (Key Codes)
+                      (byte) 0x19, (byte) 0xE0,       //   Usage Minimum (Left Ctrl)
+                      (byte) 0x29, (byte) 0xE7,       //   Usage Maximum (Right GUI)
+                      (byte) 0x15, (byte) 0x00,       //   Logical Minimum (0)
+                      (byte) 0x25, (byte) 0x01,       //   Logical Maximum (1)
+                      (byte) 0x75, (byte) 0x01,       //   Report Size (1)
+                      (byte) 0x95, (byte) 0x08,       //   Report Count (8)
+                      (byte) 0x81, (byte) 0x02,       //   Input (Data, Variable, Absolute) - modifiers
+                      (byte) 0x95, (byte) 0x01,       //   Report Count (1)
+                      (byte) 0x75, (byte) 0x08,       //   Report Size (8)
+                      (byte) 0x81, (byte) 0x01,       //   Input (Constant) - reserved byte
+                      (byte) 0x95, (byte) 0x05,       //   Report Count (5)
+                      (byte) 0x75, (byte) 0x01,       //   Report Size (1)
+                      (byte) 0x05, (byte) 0x08,       //   Usage Page (LEDs)
+                      (byte) 0x19, (byte) 0x01,       //   Usage Minimum (1)
+                      (byte) 0x29, (byte) 0x05,       //   Usage Maximum (5)
+                      (byte) 0x91, (byte) 0x02,       //   Output (Data, Variable, Absolute) - LEDs
+                      (byte) 0x95, (byte) 0x01,       //   Report Count (1)
+                      (byte) 0x75, (byte) 0x03,       //   Report Size (3)
+                      (byte) 0x91, (byte) 0x01,       //   Output (Constant) - LED padding
+                      (byte) 0x95, (byte) 0x06,       //   Report Count (6)
+                      (byte) 0x75, (byte) 0x08,       //   Report Size (8)
+                      (byte) 0x15, (byte) 0x00,       //   Logical Minimum (0)
+                      (byte) 0x25, (byte) 0x65,       //   Logical Maximum (101)
+                      (byte) 0x05, (byte) 0x07,       //   Usage Page (Key Codes)
+                      (byte) 0x19, (byte) 0x00,       //   Usage Minimum (0)
+                      (byte) 0x29, (byte) 0x65,       //   Usage Maximum (101)
+                      (byte) 0x81, (byte) 0x00,       //   Input (Data, Array) - key array
+                      (byte) 0xC0                     // End Collection
+              };
+
+              private final Context context;
+              private final Listener listener;
+              private final ExecutorService callbackExecutor = Executors.newSingleThreadExecutor();
+              private final ExecutorService typingExecutor = Executors.newSingleThreadExecutor();
+
+              private BluetoothAdapter adapter;
+              private volatile BluetoothHidDevice hid;
+              private volatile BluetoothDevice host;
+              private volatile boolean registered;
+              private volatile boolean proxyRequested;
+              private volatile boolean cancelTyping;
+              private volatile boolean typing;
+
+              HidKeyboard(Context context, Listener listener) {
+                  this.context = context.getApplicationContext();
+                  this.listener = listener;
+              }
+
+              BluetoothAdapter adapter() {
+                  if (adapter == null) {
+                      BluetoothManager bm = context.getSystemService(BluetoothManager.class);
+                      adapter = bm == null ? null : bm.getAdapter();
+                  }
+                  return adapter;
+              }
+
+              boolean isConnected() { return host != null; }
+              boolean isTyping() { return typing; }
+              BluetoothDevice host() { return host; }
+
+              /** Safe to call repeatedly; it only does work that hasn't been done yet. */
+              void start() {
+                  BluetoothAdapter a = adapter();
+                  if (a == null) {
+                      listener.onStatus("This phone has no Bluetooth.");
+                      return;
+                  }
+                  if (!a.isEnabled()) {
+                      listener.onStatus("Turn on Bluetooth to continue.");
+                      return;
+                  }
+                  if (hid != null) {
+                      if (!registered) register();
+                      return;
+                  }
+                  if (proxyRequested) return;
+                  proxyRequested = true;
+                  boolean ok = a.getProfileProxy(context, serviceListener, BluetoothProfile.HID_DEVICE);
+                  if (!ok) {
+                      proxyRequested = false;
+                      listener.onStatus("This phone doesn't support Bluetooth keyboard mode.");
+                  }
+              }
+
+              void stop() {
+                  cancelTyping = true;
+                  BluetoothHidDevice h = hid;
+                  if (h != null) {
+                      if (host != null) h.disconnect(host);
+                      h.unregisterApp();
+                      BluetoothAdapter a = adapter();
+                      if (a != null) a.closeProfileProxy(BluetoothProfile.HID_DEVICE, h);
+                  }
+                  hid = null;
+                  host = null;
+                  registered = false;
+                  proxyRequested = false;
+              }
+
+              void connect(BluetoothDevice device) {
+                  BluetoothHidDevice h = hid;
+                  if (h == null || !registered) {
+                      listener.onStatus("Keyboard mode isn't ready yet. Wait a second and try again.");
+                      return;
+                  }
+                  listener.onStatus("Connecting to " + nameOf(device) + "…");
+                  if (!h.connect(device)) {
+                      listener.onStatus("Couldn't start connecting. Try connecting from the laptop's Bluetooth settings instead.");
+                  }
+              }
+
+              void cancelTyping() { cancelTyping = true; }
+
+              /** Types the text on the laptop, one key at a time. delayMs is the pause b
